@@ -44,10 +44,20 @@ function getSvgPathFromStroke(points, closed = true) {
   return result;
 }
 
+// Distance helper to detect if pointer intersects raw stroke points
+function isPointNearStroke(x, y, rawPoints, threshold) {
+  const thresholdSq = threshold * threshold;
+  return rawPoints.some(([px, py]) => {
+    const dx = px - x;
+    const dy = py - y;
+    return dx * dx + dy * dy <= thresholdSq;
+  });
+}
+
 function App() {
   const [paths, setPaths] = useState([]);
   const [isErasing, setIsErasing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false); // New state for line deletion mode
+  const [isDeleting, setIsDeleting] = useState(false); 
   const [redoPaths, setRedoPaths] = useState([]); 
   const [currentPoints, setCurrentPoints] = useState([]); 
   const [strokeColor, setStrokeColor] = useState("white"); 
@@ -72,23 +82,47 @@ function App() {
     },
   };
 
+  function deleteLinesNearPointer(x, y) {
+    // Radius uses strokeSize + extra tolerance (minimum 15px) for thin lines
+    const radius = Math.max(strokeSize, 15);
+    setPaths((prevPaths) =>
+      prevPaths.filter(
+        (pathItem) => !isPointNearStroke(x, y, pathItem.rawPoints, radius)
+      )
+    );
+  }
+
   function handlePointerDown(e) {
-    if (isDeleting) return; // Prevent drawing when delete mode is active
     e.target.setPointerCapture(e.pointerId);
+    if (isDeleting) {
+      deleteLinesNearPointer(e.pageX, e.pageY);
+      return;
+    }
     setCurrentPoints([[e.pageX, e.pageY, e.pressure]]);
   }
 
   function handlePointerMove(e) {
-    if (isDeleting || e.buttons !== 1) return;
+    if (e.buttons !== 1) return;
+
+    if (isDeleting) {
+      deleteLinesNearPointer(e.pageX, e.pageY);
+      return;
+    }
+
     setCurrentPoints((prev) => [...prev, [e.pageX, e.pageY, e.pressure]]);
   }
 
   function handlePointerUp() {
     if (isDeleting) return;
+
     if (currentPoints.length > 0) {
       const stroke = getStroke(currentPoints, options);
       const pathData = getSvgPathFromStroke(stroke);
-      setPaths((prev) => [...prev, { pathData, color: strokeColor }]); 
+      // Store both pathData and rawPoints so we can check hitboxes during drag-delete
+      setPaths((prev) => [
+        ...prev,
+        { pathData, color: strokeColor, rawPoints: currentPoints },
+      ]); 
       setCurrentPoints([]); 
       setRedoPaths([]); 
     }
@@ -111,7 +145,7 @@ function App() {
   };
 
   const handleColorChange = (color) => {
-    setIsDeleting(false); // Disable delete mode on color selection
+    setIsDeleting(false); 
     if (isErasing) {
       setIsErasing(false);
       setStrokeSize(8);
@@ -129,12 +163,6 @@ function App() {
   const toggleDeleteMode = () => {
     setIsDeleting((prev) => !prev);
     setIsErasing(false);
-  };
-
-  const handlePathClick = (indexToDelete, e) => {
-    if (!isDeleting) return;
-    e.stopPropagation(); // Stop event propagation to SVG element
-    setPaths((prev) => prev.filter((_, index) => index !== indexToDelete));
   };
 
   const handleKeyDown = (e) => {
@@ -178,19 +206,15 @@ function App() {
           style={{ 
             touchAction: "none", 
             background: "#101214",
-            cursor: isDeleting ? "pointer" : "crosshair"
+            cursor: isDeleting ? "crosshair" : "default"
           }}
         >
-          {paths.map((pathData, index) => (
+          {paths.map((pathItem, index) => (
             <path
               key={index}
-              d={pathData.pathData}
-              fill={pathData.color}
-              onClick={(e) => handlePathClick(index, e)}
-              style={{
-                pointerEvents: isDeleting ? "all" : "none",
-                cursor: isDeleting ? "pointer" : "default",
-              }}
+              d={pathItem.pathData}
+              fill={pathItem.color}
+              style={{ pointerEvents: "none" }}
             />
           ))}
           {currentPoints.length > 0 && (
