@@ -47,15 +47,16 @@ function getSvgPathFromStroke(points, closed = true) {
 function App() {
   const [paths, setPaths] = useState([]);
   const [isErasing, setIsErasing] = useState(false);
-  const [redoPaths, setRedoPaths] = useState([]); // Array of redo paths
-  const [currentPoints, setCurrentPoints] = useState([]); // Points for the current path
-  const [strokeColor, setStrokeColor] = useState("white"); // Current stroke color
-  const [strokeSize, setStrokeSize] = useState(8); // Default stroke size
-  const [imageUrl, setImageUrl] = useState(null); // State for the image URL
-  const svgRef = useRef(); // Reference for the SVG
+  const [isDeleting, setIsDeleting] = useState(false); // New state for line deletion mode
+  const [redoPaths, setRedoPaths] = useState([]); 
+  const [currentPoints, setCurrentPoints] = useState([]); 
+  const [strokeColor, setStrokeColor] = useState("white"); 
+  const [strokeSize, setStrokeSize] = useState(8); 
+  const [imageUrl, setImageUrl] = useState(null); 
+  const svgRef = useRef(); 
 
   const options = {
-    size: strokeSize, // Use the stroke size from the state
+    size: strokeSize, 
     thinning: 0.5,
     smoothing: 0.5,
     streamline: 0.5,
@@ -72,53 +73,68 @@ function App() {
   };
 
   function handlePointerDown(e) {
+    if (isDeleting) return; // Prevent drawing when delete mode is active
     e.target.setPointerCapture(e.pointerId);
     setCurrentPoints([[e.pageX, e.pageY, e.pressure]]);
   }
 
   function handlePointerMove(e) {
-    if (e.buttons !== 1) return;
+    if (isDeleting || e.buttons !== 1) return;
     setCurrentPoints((prev) => [...prev, [e.pageX, e.pageY, e.pressure]]);
   }
 
   function handlePointerUp() {
+    if (isDeleting) return;
     if (currentPoints.length > 0) {
       const stroke = getStroke(currentPoints, options);
       const pathData = getSvgPathFromStroke(stroke);
-      setPaths((prev) => [...prev, { pathData, color: strokeColor }]); // Add the new path with color
-      setCurrentPoints([]); // Reset current points for the next line
-      setRedoPaths([]); // Clear redo stack when a new path is drawn
+      setPaths((prev) => [...prev, { pathData, color: strokeColor }]); 
+      setCurrentPoints([]); 
+      setRedoPaths([]); 
     }
   }
 
   const handleUndo = () => {
     if (paths.length > 0) {
       const lastPath = paths[paths.length - 1];
-      setRedoPaths((prev) => [...prev, lastPath]); // Add the last path to redo stack
-      setPaths((prev) => prev.slice(0, -1)); // Remove the last path from the stack
+      setRedoPaths((prev) => [...prev, lastPath]); 
+      setPaths((prev) => prev.slice(0, -1)); 
     }
   };
 
   const handleRedo = () => {
     if (redoPaths.length > 0) {
       const lastRedoPath = redoPaths[redoPaths.length - 1];
-      setPaths((prev) => [...prev, lastRedoPath]); // Add the last redo path back to paths
-      setRedoPaths((prev) => prev.slice(0, -1)); // Remove it from redo stack
+      setPaths((prev) => [...prev, lastRedoPath]); 
+      setRedoPaths((prev) => prev.slice(0, -1)); 
     }
   };
 
   const handleColorChange = (color) => {
+    setIsDeleting(false); // Disable delete mode on color selection
     if (isErasing) {
       setIsErasing(false);
       setStrokeSize(8);
     }
-    setStrokeColor(color); // Update the current stroke color
+    setStrokeColor(color); 
   };
+
   const handleEraser = (color) => {
+    setIsDeleting(false);
     setStrokeColor(color);
     setStrokeSize(25);
     setIsErasing(true);
-    // Update the current stroke color
+  };
+
+  const toggleDeleteMode = () => {
+    setIsDeleting((prev) => !prev);
+    setIsErasing(false);
+  };
+
+  const handlePathClick = (indexToDelete, e) => {
+    if (!isDeleting) return;
+    e.stopPropagation(); // Stop event propagation to SVG element
+    setPaths((prev) => prev.filter((_, index) => index !== indexToDelete));
   };
 
   const handleKeyDown = (e) => {
@@ -141,7 +157,7 @@ function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [paths, redoPaths]); // Dependencies to ensure the latest paths are used
+  }, [paths, redoPaths]); 
 
   return (
     <div className="wrapper" tabIndex={0}>
@@ -159,15 +175,29 @@ function App() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          style={{ touchAction: "none", background: "#101214" }}
+          style={{ 
+            touchAction: "none", 
+            background: "#101214",
+            cursor: isDeleting ? "pointer" : "crosshair"
+          }}
         >
           {paths.map((pathData, index) => (
-            <path key={index} d={pathData.pathData} fill={pathData.color} />
+            <path
+              key={index}
+              d={pathData.pathData}
+              fill={pathData.color}
+              onClick={(e) => handlePathClick(index, e)}
+              style={{
+                pointerEvents: isDeleting ? "all" : "none",
+                cursor: isDeleting ? "pointer" : "default",
+              }}
+            />
           ))}
           {currentPoints.length > 0 && (
             <path
               d={getSvgPathFromStroke(getStroke(currentPoints, options))}
               fill={strokeColor}
+              style={{ pointerEvents: "none" }}
             />
           )}
         </svg>
@@ -239,13 +269,20 @@ function App() {
             style={{ backgroundColor: "darkviolet" }}
           ></IconButton>
           <div className="space"></div>
-          <div className="space"></div>
           <IconButton
             onClick={() => handleEraser("rgb(16, 18, 20)")}
             className="color-button eraser"
             style={{ backgroundColor: "grey" }}
           >
             <EditOff style={{ color: "white" }} />
+          </IconButton>
+          <div className="space"></div>
+          <IconButton
+            onClick={toggleDeleteMode}
+            className="color-button delete"
+            style={{ backgroundColor: isDeleting ? "#e53935" : "grey" }}
+          >
+            <Delete style={{ color: "white" }} />
           </IconButton>
         </div>
         <StrokeSizeSlider
@@ -280,7 +317,7 @@ const StrokeSizeSlider = ({ strokeSize, setStrokeSize }) => {
         alignItems: "center",
       }}
     >
-      <div style={{ fontFamily: "roboto", color: "white", fontSize: "14 px" }}>
+      <div style={{ fontFamily: "roboto", color: "white", fontSize: "14px" }}>
         Size
       </div>
       <Slider
