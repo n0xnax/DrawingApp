@@ -70,7 +70,7 @@ function App() {
   const [bgColor, setBgColor] = useState("#101214");
   const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
 
-  // Toolbar position and drag tracking
+  // Movable toolbar positioning state
   const [toolbarPos, setToolbarPos] = useState({
     x: window.innerWidth / 2,
     y: window.innerHeight - 50,
@@ -177,7 +177,7 @@ function App() {
     }
   }
 
-  // Toolbar drag handlers
+  // Drag handlers for floating toolbar
   const handleToolbarDragStart = (e) => {
     e.stopPropagation();
     isDraggingToolbar.current = true;
@@ -281,7 +281,15 @@ function App() {
     const svgElement = svgRef.current;
     if (!svgElement) return;
 
+    // Temporarily hide cursor indicator so it isn't rendered in the output PNG
+    const cursorCircle = svgElement.querySelector("circle");
+    if (cursorCircle) cursorCircle.style.display = "none";
+
     const svgString = new XMLSerializer().serializeToString(svgElement);
+
+    // Restore cursor visibility immediately after serialization
+    if (cursorCircle) cursorCircle.style.display = "";
+
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     const img = new Image();
@@ -394,7 +402,7 @@ function App() {
         />
       </svg>
 
-      {/* Movable, Compact Floating Control Toolbar */}
+      {/* Compact & Movable Floating Control Card */}
       <Card
         className="settings"
         variant="outlined"
@@ -415,7 +423,7 @@ function App() {
           boxShadow: "0px 4px 12px rgba(0,0,0,0.4)",
         }}
       >
-        {/* Drag Handle */}
+        {/* Drag handle icon */}
         <div
           onPointerDown={handleToolbarDragStart}
           style={{
