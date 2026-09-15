@@ -73,7 +73,7 @@ function App() {
   const hasDeletedInCurrentDrag = useRef(false);
   const svgRef = useRef();
 
-  // Dynamic primary contrast color (White for dark bg, Dark for light bg)
+  // Dynamic primary contrast color (White for dark canvas, Dark for light canvas)
   const contrastColor = bgColor === "#101214" ? "white" : "#101214";
 
   const options = {
@@ -353,6 +353,7 @@ function App() {
         />
       </svg>
 
+      {/* Centered Floating Control Card */}
       <Card
         className="settings"
         variant="outlined"
@@ -362,19 +363,25 @@ function App() {
           bottom: 20,
           left: "50%",
           transform: "translateX(-50%)",
-          padding: "10px 20px",
+          padding: "12px 24px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "8px",
+          width: "fit-content",
+          zIndex: 10,
         }}
       >
         <div
           className="undoredo"
-          style={{ display: "flex", justifyContent: "center" }}
+          style={{ display: "flex", justifyContent: "center", alignItems: "center" }}
         >
           <Button
             startIcon={<UndoOutlined />}
             variant="contained"
             onClick={handleUndo}
             disabled={historyIndex <= 0}
-            style={{ margin: "5px" }}
+            style={{ margin: "0 4px" }}
           >
             Undo
           </Button>
@@ -383,7 +390,7 @@ function App() {
             variant="contained"
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
-            style={{ margin: "5px" }}
+            style={{ margin: "0 4px" }}
           >
             Redo
           </Button>
@@ -393,7 +400,7 @@ function App() {
               variant="outlined"
               color="error"
               onClick={handleClearCanvas}
-              style={{ margin: "5px" }}
+              style={{ margin: "0 4px" }}
             >
               Clear
             </Button>
@@ -404,7 +411,7 @@ function App() {
               variant="outlined"
               color="success"
               onClick={handleExportPNG}
-              style={{ margin: "5px" }}
+              style={{ margin: "0 4px" }}
             >
               Export
             </Button>
@@ -417,10 +424,9 @@ function App() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            margin: "10px 0",
+            margin: "4px 0",
           }}
         >
-          {/* Swatches (first button adaptively toggles between White and Dark depending on canvas background) */}
           {[
             contrastColor,
             "firebrick",
@@ -473,7 +479,7 @@ function App() {
 
           <div
             style={{
-              marginLeft: "15px",
+              marginLeft: "10px",
               borderLeft: "1px solid #444",
               paddingLeft: "10px",
               display: "flex",
