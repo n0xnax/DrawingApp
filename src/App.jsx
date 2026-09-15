@@ -73,7 +73,7 @@ function App() {
   const hasDeletedInCurrentDrag = useRef(false);
   const svgRef = useRef();
 
-  // Dynamic primary contrast color (White for dark canvas, Dark for light canvas)
+  // Primary contrast color toggles between white on dark bg and dark on light bg
   const contrastColor = bgColor === "#101214" ? "white" : "#101214";
 
   const options = {
@@ -353,7 +353,7 @@ function App() {
         />
       </svg>
 
-      {/* Centered Floating Control Card */}
+      {/* Single-row horizontally centered toolbar */}
       <Card
         className="settings"
         variant="outlined"
@@ -363,25 +363,25 @@ function App() {
           bottom: 20,
           left: "50%",
           transform: "translateX(-50%)",
-          padding: "12px 24px",
+          padding: "8px 16px",
           display: "flex",
-          flexDirection: "column",
+          flexDirection: "row",
           alignItems: "center",
-          gap: "8px",
-          width: "fit-content",
+          gap: "16px",
+          width: "max-content",
           zIndex: 10,
         }}
       >
         <div
           className="undoredo"
-          style={{ display: "flex", justifyContent: "center", alignItems: "center" }}
+          style={{ display: "flex", alignItems: "center" }}
         >
           <Button
             startIcon={<UndoOutlined />}
             variant="contained"
             onClick={handleUndo}
             disabled={historyIndex <= 0}
-            style={{ margin: "0 4px" }}
+            style={{ margin: "0 2px" }}
           >
             Undo
           </Button>
@@ -390,7 +390,7 @@ function App() {
             variant="contained"
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
-            style={{ margin: "0 4px" }}
+            style={{ margin: "0 2px" }}
           >
             Redo
           </Button>
@@ -400,7 +400,7 @@ function App() {
               variant="outlined"
               color="error"
               onClick={handleClearCanvas}
-              style={{ margin: "0 4px" }}
+              style={{ margin: "0 2px" }}
             >
               Clear
             </Button>
@@ -411,7 +411,7 @@ function App() {
               variant="outlined"
               color="success"
               onClick={handleExportPNG}
-              style={{ margin: "0 4px" }}
+              style={{ margin: "0 2px" }}
             >
               Export
             </Button>
@@ -423,8 +423,6 @@ function App() {
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            margin: "4px 0",
           }}
         >
           {[
@@ -442,7 +440,7 @@ function App() {
               className="color-button"
               style={{
                 backgroundColor: color,
-                margin: "0 4px",
+                margin: "0 2px",
                 border:
                   strokeColor === color && !isErasing && !isDeleting
                     ? "2px solid #00e5ff"
@@ -457,7 +455,7 @@ function App() {
               className="color-button eraser"
               style={{
                 backgroundColor: isErasing ? "#00e5ff" : "grey",
-                margin: "0 4px",
+                margin: "0 2px",
               }}
             >
               <EditOff style={{ color: "white" }} />
@@ -470,7 +468,7 @@ function App() {
               className="color-button delete"
               style={{
                 backgroundColor: isDeleting ? "#e53935" : "grey",
-                margin: "0 4px",
+                margin: "0 2px",
               }}
             >
               <Delete style={{ color: "white" }} />
@@ -479,9 +477,9 @@ function App() {
 
           <div
             style={{
-              marginLeft: "10px",
+              marginLeft: "6px",
               borderLeft: "1px solid #444",
-              paddingLeft: "10px",
+              paddingLeft: "6px",
               display: "flex",
             }}
           >
@@ -534,18 +532,17 @@ const StrokeSizeSlider = ({ strokeSize, setStrokeSize }) => {
   return (
     <div
       style={{
-        width: "200px",
+        width: "140px",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
-        margin: "0 auto",
+        gap: "8px",
       }}
     >
-      <div style={{ fontFamily: "roboto", color: "white", fontSize: "14px" }}>
+      <div style={{ fontFamily: "roboto", color: "white", fontSize: "12px" }}>
         Size
       </div>
       <Slider
-        size="medium"
+        size="small"
         aria-label="Stroke Size"
         value={strokeSize}
         onChange={(e, newValue) => setStrokeSize(newValue)}
