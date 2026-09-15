@@ -10,7 +10,6 @@ import {
   DownloadOutlined,
   Layers,
   CleaningServices,
-  GridOn,
 } from "@mui/icons-material";
 
 const average = (a, b) => (a + b) / 2;
@@ -74,6 +73,9 @@ function App() {
   const hasDeletedInCurrentDrag = useRef(false);
   const svgRef = useRef();
 
+  // Dynamic primary contrast color (White for dark bg, Dark for light bg)
+  const contrastColor = bgColor === "#101214" ? "white" : "#101214";
+
   const options = {
     size: strokeSize,
     thinning: 0.5,
@@ -124,7 +126,8 @@ function App() {
       return;
     }
 
-    const pressure = e.pointerType === "touch" || e.pointerType === "pen" ? e.pressure : 0.5;
+    const pressure =
+      e.pointerType === "touch" || e.pointerType === "pen" ? e.pressure : 0.5;
     setCurrentPoints([[e.clientX, e.clientY, pressure]]);
   }
 
@@ -138,7 +141,8 @@ function App() {
       return;
     }
 
-    const pressure = e.pointerType === "touch" || e.pointerType === "pen" ? e.pressure : 0.5;
+    const pressure =
+      e.pointerType === "touch" || e.pointerType === "pen" ? e.pressure : 0.5;
     setCurrentPoints((prev) => [...prev, [e.clientX, e.clientY, pressure]]);
   }
 
@@ -209,10 +213,27 @@ function App() {
   };
 
   const handleBgChange = (newBg) => {
+    if (newBg === bgColor) return;
+
+    const oldTargetColor = newBg === "#f5f5f5" ? "white" : "#101214";
+    const newTargetColor = newBg === "#f5f5f5" ? "#101214" : "white";
+
+    const updatedPaths = paths.map((path) => {
+      if (path.color === oldTargetColor) {
+        return { ...path, color: newTargetColor };
+      }
+      return path;
+    });
+
     setBgColor(newBg);
-    if (isErasing) {
+
+    if (strokeColor === oldTargetColor) {
+      setStrokeColor(newTargetColor);
+    } else if (isErasing) {
       setStrokeColor(newBg);
     }
+
+    pushToHistory(updatedPaths);
   };
 
   const handleExportPNG = () => {
@@ -224,7 +245,9 @@ function App() {
     const ctx = canvas.getContext("2d");
     const img = new Image();
 
-    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const svgBlob = new Blob([svgString], {
+      type: "image/svg+xml;charset=utf-8",
+    });
     const url = URL.createObjectURL(svgBlob);
 
     img.onload = () => {
@@ -275,7 +298,11 @@ function App() {
   }, [historyIndex, history]);
 
   return (
-    <div className="wrapper" tabIndex={0} style={{ position: "relative", overflow: "hidden" }}>
+    <div
+      className="wrapper"
+      tabIndex={0}
+      style={{ position: "relative", overflow: "hidden" }}
+    >
       <svg
         ref={svgRef}
         className="paint"
@@ -307,13 +334,20 @@ function App() {
           />
         )}
 
-        {/* Dynamic Cursor Circle */}
         <circle
           cx={cursorPos.x}
           cy={cursorPos.y}
           r={isDeleting ? Math.max(strokeSize, 15) : strokeSize / 2}
           fill={isDeleting ? "rgba(229, 57, 53, 0.25)" : "none"}
-          stroke={isDeleting ? "#e53935" : isErasing ? "#ffffff" : strokeColor}
+          stroke={
+            isDeleting
+              ? "#e53935"
+              : isErasing
+              ? bgColor === "#101214"
+                ? "#ffffff"
+                : "#000000"
+              : strokeColor
+          }
           strokeWidth={isDeleting ? 1.5 : 1}
           style={{ pointerEvents: "none" }}
         />
@@ -322,9 +356,19 @@ function App() {
       <Card
         className="settings"
         variant="outlined"
-        sx={{ backgroundColor: "#12171c", position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", padding: "10px 20px" }}
+        sx={{
+          backgroundColor: "#12171c",
+          position: "absolute",
+          bottom: 20,
+          left: "50%",
+          transform: "translateX(-50%)",
+          padding: "10px 20px",
+        }}
       >
-        <div className="undoredo" style={{ display: "flex", justifyContent: "center" }}>
+        <div
+          className="undoredo"
+          style={{ display: "flex", justifyContent: "center" }}
+        >
           <Button
             startIcon={<UndoOutlined />}
             variant="contained"
@@ -367,8 +411,25 @@ function App() {
           </Tooltip>
         </div>
 
-        <div className="color-buttons" style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "10px 0" }}>
-          {["white", "firebrick", "dodgerblue", "green", "yellow", "hotpink", "darkviolet"].map((color) => (
+        <div
+          className="color-buttons"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "10px 0",
+          }}
+        >
+          {/* Swatches (first button adaptively toggles between White and Dark depending on canvas background) */}
+          {[
+            contrastColor,
+            "firebrick",
+            "dodgerblue",
+            "green",
+            "yellow",
+            "hotpink",
+            "darkviolet",
+          ].map((color) => (
             <IconButton
               key={color}
               onClick={() => handleColorChange(color)}
@@ -376,7 +437,10 @@ function App() {
               style={{
                 backgroundColor: color,
                 margin: "0 4px",
-                border: strokeColor === color && !isErasing && !isDeleting ? "2px solid #00e5ff" : "none",
+                border:
+                  strokeColor === color && !isErasing && !isDeleting
+                    ? "2px solid #00e5ff"
+                    : "1px solid #444",
               }}
             />
           ))}
@@ -385,7 +449,10 @@ function App() {
             <IconButton
               onClick={handleEraser}
               className="color-button eraser"
-              style={{ backgroundColor: isErasing ? "#00e5ff" : "grey", margin: "0 4px" }}
+              style={{
+                backgroundColor: isErasing ? "#00e5ff" : "grey",
+                margin: "0 4px",
+              }}
             >
               <EditOff style={{ color: "white" }} />
             </IconButton>
@@ -395,21 +462,40 @@ function App() {
             <IconButton
               onClick={toggleDeleteMode}
               className="color-button delete"
-              style={{ backgroundColor: isDeleting ? "#e53935" : "grey", margin: "0 4px" }}
+              style={{
+                backgroundColor: isDeleting ? "#e53935" : "grey",
+                margin: "0 4px",
+              }}
             >
               <Delete style={{ color: "white" }} />
             </IconButton>
           </Tooltip>
 
-          {/* Canvas Background Color Options */}
-          <div style={{ marginLeft: "15px", borderLeft: "1px solid #444", paddingLeft: "10px", display: "flex" }}>
+          <div
+            style={{
+              marginLeft: "15px",
+              borderLeft: "1px solid #444",
+              paddingLeft: "10px",
+              display: "flex",
+            }}
+          >
             <Tooltip title="Dark Canvas">
-              <IconButton onClick={() => handleBgChange("#101214")} style={{ color: "#fff" }}>
+              <IconButton
+                onClick={() => handleBgChange("#101214")}
+                style={{
+                  color: bgColor === "#101214" ? "#00e5ff" : "#fff",
+                }}
+              >
                 <Layers />
               </IconButton>
             </Tooltip>
             <Tooltip title="Light Canvas">
-              <IconButton onClick={() => handleBgChange("#f5f5f5")} style={{ color: "#aaa" }}>
+              <IconButton
+                onClick={() => handleBgChange("#f5f5f5")}
+                style={{
+                  color: bgColor === "#f5f5f5" ? "#00e5ff" : "#aaa",
+                }}
+              >
                 <Layers />
               </IconButton>
             </Tooltip>
