@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import { getStroke } from "perfect-freehand";
-import { Button, Card, Slider, IconButton } from "@mui/material";
+import { Button, Card, Slider, IconButton, Tooltip } from "@mui/material";
 import {
   UndoOutlined,
   RedoOutlined,
   Delete,
   EditOff,
+  DownloadOutlined,
+  Layers,
+  CleaningServices,
+  GridOn,
 } from "@mui/icons-material";
 
 const average = (a, b) => (a + b) / 2;
@@ -55,15 +59,16 @@ function isPointNearStroke(x, y, rawPoints, threshold) {
 
 function App() {
   const [paths, setPaths] = useState([]);
-  const [history, setHistory] = useState([[]]); // Full snapshots history
-  const [historyIndex, setHistoryIndex] = useState(0); // Current index in history
+  const [history, setHistory] = useState([[]]);
+  const [historyIndex, setHistoryIndex] = useState(0);
 
   const [isErasing, setIsErasing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentPoints, setCurrentPoints] = useState([]);
   const [strokeColor, setStrokeColor] = useState("white");
   const [strokeSize, setStrokeSize] = useState(8);
-  const [imageUrl, setImageUrl] = useState(null);
+  const [bgColor, setBgColor] = useState("#101214");
+  const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
 
   const isDraggingDelete = useRef(false);
   const hasDeletedInCurrentDrag = useRef(false);
@@ -86,7 +91,6 @@ function App() {
     },
   };
 
-  // Helper to append a new state to history and truncate redo steps
   const pushToHistory = (newPaths) => {
     const nextHistory = history.slice(0, historyIndex + 1);
     setHistory([...nextHistory, newPaths]);
@@ -111,32 +115,36 @@ function App() {
 
   function handlePointerDown(e) {
     e.target.setPointerCapture(e.pointerId);
+    setCursorPos({ x: e.clientX, y: e.clientY });
 
     if (isDeleting) {
       isDraggingDelete.current = true;
       hasDeletedInCurrentDrag.current = false;
-      deleteLinesNearPointer(e.pageX, e.pageY);
+      deleteLinesNearPointer(e.clientX, e.clientY);
       return;
     }
 
-    setCurrentPoints([[e.pageX, e.pageY, e.pressure]]);
+    const pressure = e.pointerType === "touch" || e.pointerType === "pen" ? e.pressure : 0.5;
+    setCurrentPoints([[e.clientX, e.clientY, pressure]]);
   }
 
   function handlePointerMove(e) {
+    setCursorPos({ x: e.clientX, y: e.clientY });
+
     if (e.buttons !== 1) return;
 
     if (isDeleting && isDraggingDelete.current) {
-      deleteLinesNearPointer(e.pageX, e.pageY);
+      deleteLinesNearPointer(e.clientX, e.clientY);
       return;
     }
 
-    setCurrentPoints((prev) => [...prev, [e.pageX, e.pageY, e.pressure]]);
+    const pressure = e.pointerType === "touch" || e.pointerType === "pen" ? e.pressure : 0.5;
+    setCurrentPoints((prev) => [...prev, [e.clientX, e.clientY, pressure]]);
   }
 
   function handlePointerUp() {
     if (isDeleting) {
       if (isDraggingDelete.current && hasDeletedInCurrentDrag.current) {
-        // Record deletion snapshot to history
         pushToHistory(paths);
       }
       isDraggingDelete.current = false;
@@ -173,6 +181,12 @@ function App() {
     }
   };
 
+  const handleClearCanvas = () => {
+    if (paths.length > 0) {
+      pushToHistory([]);
+    }
+  };
+
   const handleColorChange = (color) => {
     setIsDeleting(false);
     if (isErasing) {
@@ -182,9 +196,9 @@ function App() {
     setStrokeColor(color);
   };
 
-  const handleEraser = (color) => {
+  const handleEraser = () => {
     setIsDeleting(false);
-    setStrokeColor(color);
+    setStrokeColor(bgColor);
     setStrokeSize(25);
     setIsErasing(true);
   };
@@ -192,6 +206,46 @@ function App() {
   const toggleDeleteMode = () => {
     setIsDeleting((prev) => !prev);
     setIsErasing(false);
+  };
+
+  const handleBgChange = (newBg) => {
+    setBgColor(newBg);
+    if (isErasing) {
+      setStrokeColor(newBg);
+    }
+  };
+
+  const handleExportPNG = () => {
+    const svgElement = svgRef.current;
+    if (!svgElement) return;
+
+    const svgString = new XMLSerializer().serializeToString(svgElement);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+
+    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = () => {
+      canvas.width = svgElement.clientWidth || 1200;
+      canvas.height = svgElement.clientHeight || 800;
+
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      const pngUrl = canvas.toDataURL("image/png");
+      const downloadLink = document.createElement("a");
+      downloadLink.href = pngUrl;
+      downloadLink.download = "drawing.png";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+    };
+
+    img.src = url;
   };
 
   const handleKeyDown = (e) => {
@@ -221,57 +275,62 @@ function App() {
   }, [historyIndex, history]);
 
   return (
-    <div className="wrapper" tabIndex={0}>
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt="Exported Drawing"
-          style={{ width: "100%", height: "auto" }}
+    <div className="wrapper" tabIndex={0} style={{ position: "relative", overflow: "hidden" }}>
+      <svg
+        ref={svgRef}
+        className="paint"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        style={{
+          touchAction: "none",
+          background: bgColor,
+          cursor: "none",
+          width: "100vw",
+          height: "100vh",
+        }}
+      >
+        {paths.map((pathItem, index) => (
+          <path
+            key={index}
+            d={pathItem.pathData}
+            fill={pathItem.color}
+            style={{ pointerEvents: "none" }}
+          />
+        ))}
+        {currentPoints.length > 0 && (
+          <path
+            d={getSvgPathFromStroke(getStroke(currentPoints, options))}
+            fill={strokeColor}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
+
+        {/* Dynamic Cursor Circle */}
+        <circle
+          cx={cursorPos.x}
+          cy={cursorPos.y}
+          r={isDeleting ? Math.max(strokeSize, 15) : strokeSize / 2}
+          fill={isDeleting ? "rgba(229, 57, 53, 0.25)" : "none"}
+          stroke={isDeleting ? "#e53935" : isErasing ? "#ffffff" : strokeColor}
+          strokeWidth={isDeleting ? 1.5 : 1}
+          style={{ pointerEvents: "none" }}
         />
-      ) : (
-        <svg
-          ref={svgRef}
-          className="paint"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          style={{
-            touchAction: "none",
-            background: "#101214",
-            cursor: isDeleting ? "crosshair" : "default",
-          }}
-        >
-          {paths.map((pathItem, index) => (
-            <path
-              key={index}
-              d={pathItem.pathData}
-              fill={pathItem.color}
-              style={{ pointerEvents: "none" }}
-            />
-          ))}
-          {currentPoints.length > 0 && (
-            <path
-              d={getSvgPathFromStroke(getStroke(currentPoints, options))}
-              fill={strokeColor}
-              style={{ pointerEvents: "none" }}
-            />
-          )}
-        </svg>
-      )}
+      </svg>
 
       <Card
         className="settings"
         variant="outlined"
-        sx={{ backgroundColor: "#12171c" }}
+        sx={{ backgroundColor: "#12171c", position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", padding: "10px 20px" }}
       >
-        <div className="undoredo">
+        <div className="undoredo" style={{ display: "flex", justifyContent: "center" }}>
           <Button
             startIcon={<UndoOutlined />}
             variant="contained"
             onClick={handleUndo}
             disabled={historyIndex <= 0}
-            style={{ margin: "10px" }}
+            style={{ margin: "5px" }}
           >
             Undo
           </Button>
@@ -280,70 +339,83 @@ function App() {
             variant="contained"
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
-            style={{ margin: "10px" }}
+            style={{ margin: "5px" }}
           >
             Redo
           </Button>
+          <Tooltip title="Clear Canvas">
+            <Button
+              startIcon={<CleaningServices />}
+              variant="outlined"
+              color="error"
+              onClick={handleClearCanvas}
+              style={{ margin: "5px" }}
+            >
+              Clear
+            </Button>
+          </Tooltip>
+          <Tooltip title="Export Drawing as PNG">
+            <Button
+              startIcon={<DownloadOutlined />}
+              variant="outlined"
+              color="success"
+              onClick={handleExportPNG}
+              style={{ margin: "5px" }}
+            >
+              Export
+            </Button>
+          </Tooltip>
         </div>
-        <div className="color-buttons">
-          <IconButton
-            onClick={() => handleColorChange("white")}
-            className="color-button"
-            style={{ backgroundColor: "white" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleColorChange("firebrick")}
-            className="color-button"
-            style={{ backgroundColor: "firebrick" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleColorChange("dodgerblue")}
-            className="color-button"
-            style={{ backgroundColor: "dodgerblue" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleColorChange("green")}
-            className="color-button"
-            style={{ backgroundColor: "green" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleColorChange("yellow")}
-            className="color-button"
-            style={{ backgroundColor: "yellow" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleColorChange("hotpink")}
-            className="color-button"
-            style={{ backgroundColor: "hotpink" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleColorChange("darkviolet")}
-            className="color-button"
-            style={{ backgroundColor: "darkviolet" }}
-          ></IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={() => handleEraser("rgb(16, 18, 20)")}
-            className="color-button eraser"
-            style={{ backgroundColor: "grey" }}
-          >
-            <EditOff style={{ color: "white" }} />
-          </IconButton>
-          <div className="space"></div>
-          <IconButton
-            onClick={toggleDeleteMode}
-            className="color-button delete"
-            style={{ backgroundColor: isDeleting ? "#e53935" : "grey" }}
-          >
-            <Delete style={{ color: "white" }} />
-          </IconButton>
+
+        <div className="color-buttons" style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "10px 0" }}>
+          {["white", "firebrick", "dodgerblue", "green", "yellow", "hotpink", "darkviolet"].map((color) => (
+            <IconButton
+              key={color}
+              onClick={() => handleColorChange(color)}
+              className="color-button"
+              style={{
+                backgroundColor: color,
+                margin: "0 4px",
+                border: strokeColor === color && !isErasing && !isDeleting ? "2px solid #00e5ff" : "none",
+              }}
+            />
+          ))}
+
+          <Tooltip title="Background Eraser">
+            <IconButton
+              onClick={handleEraser}
+              className="color-button eraser"
+              style={{ backgroundColor: isErasing ? "#00e5ff" : "grey", margin: "0 4px" }}
+            >
+              <EditOff style={{ color: "white" }} />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Line Deletion Mode">
+            <IconButton
+              onClick={toggleDeleteMode}
+              className="color-button delete"
+              style={{ backgroundColor: isDeleting ? "#e53935" : "grey", margin: "0 4px" }}
+            >
+              <Delete style={{ color: "white" }} />
+            </IconButton>
+          </Tooltip>
+
+          {/* Canvas Background Color Options */}
+          <div style={{ marginLeft: "15px", borderLeft: "1px solid #444", paddingLeft: "10px", display: "flex" }}>
+            <Tooltip title="Dark Canvas">
+              <IconButton onClick={() => handleBgChange("#101214")} style={{ color: "#fff" }}>
+                <Layers />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Light Canvas">
+              <IconButton onClick={() => handleBgChange("#f5f5f5")} style={{ color: "#aaa" }}>
+                <Layers />
+              </IconButton>
+            </Tooltip>
+          </div>
         </div>
+
         <StrokeSizeSlider
           strokeSize={strokeSize}
           setStrokeSize={setStrokeSize}
@@ -374,6 +446,7 @@ const StrokeSizeSlider = ({ strokeSize, setStrokeSize }) => {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        margin: "0 auto",
       }}
     >
       <div style={{ fontFamily: "roboto", color: "white", fontSize: "14px" }}>
