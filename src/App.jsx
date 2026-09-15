@@ -44,7 +44,6 @@ function getSvgPathFromStroke(points, closed = true) {
   return result;
 }
 
-// Distance helper to detect if pointer intersects raw stroke points
 function isPointNearStroke(x, y, rawPoints, threshold) {
   const thresholdSq = threshold * threshold;
   return rawPoints.some(([px, py]) => {
@@ -56,17 +55,22 @@ function isPointNearStroke(x, y, rawPoints, threshold) {
 
 function App() {
   const [paths, setPaths] = useState([]);
+  const [history, setHistory] = useState([[]]); // Full snapshots history
+  const [historyIndex, setHistoryIndex] = useState(0); // Current index in history
+
   const [isErasing, setIsErasing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false); 
-  const [redoPaths, setRedoPaths] = useState([]); 
-  const [currentPoints, setCurrentPoints] = useState([]); 
-  const [strokeColor, setStrokeColor] = useState("white"); 
-  const [strokeSize, setStrokeSize] = useState(8); 
-  const [imageUrl, setImageUrl] = useState(null); 
-  const svgRef = useRef(); 
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [currentPoints, setCurrentPoints] = useState([]);
+  const [strokeColor, setStrokeColor] = useState("white");
+  const [strokeSize, setStrokeSize] = useState(8);
+  const [imageUrl, setImageUrl] = useState(null);
+
+  const isDraggingDelete = useRef(false);
+  const hasDeletedInCurrentDrag = useRef(false);
+  const svgRef = useRef();
 
   const options = {
-    size: strokeSize, 
+    size: strokeSize,
     thinning: 0.5,
     smoothing: 0.5,
     streamline: 0.5,
@@ -82,29 +86,46 @@ function App() {
     },
   };
 
+  // Helper to append a new state to history and truncate redo steps
+  const pushToHistory = (newPaths) => {
+    const nextHistory = history.slice(0, historyIndex + 1);
+    setHistory([...nextHistory, newPaths]);
+    setHistoryIndex(nextHistory.length);
+    setPaths(newPaths);
+  };
+
   function deleteLinesNearPointer(x, y) {
-    // Radius uses strokeSize + extra tolerance (minimum 15px) for thin lines
     const radius = Math.max(strokeSize, 15);
-    setPaths((prevPaths) =>
-      prevPaths.filter(
+    setPaths((prevPaths) => {
+      const filtered = prevPaths.filter(
         (pathItem) => !isPointNearStroke(x, y, pathItem.rawPoints, radius)
-      )
-    );
+      );
+
+      if (filtered.length !== prevPaths.length) {
+        hasDeletedInCurrentDrag.current = true;
+      }
+
+      return filtered;
+    });
   }
 
   function handlePointerDown(e) {
     e.target.setPointerCapture(e.pointerId);
+
     if (isDeleting) {
+      isDraggingDelete.current = true;
+      hasDeletedInCurrentDrag.current = false;
       deleteLinesNearPointer(e.pageX, e.pageY);
       return;
     }
+
     setCurrentPoints([[e.pageX, e.pageY, e.pressure]]);
   }
 
   function handlePointerMove(e) {
     if (e.buttons !== 1) return;
 
-    if (isDeleting) {
+    if (isDeleting && isDraggingDelete.current) {
       deleteLinesNearPointer(e.pageX, e.pageY);
       return;
     }
@@ -113,44 +134,52 @@ function App() {
   }
 
   function handlePointerUp() {
-    if (isDeleting) return;
+    if (isDeleting) {
+      if (isDraggingDelete.current && hasDeletedInCurrentDrag.current) {
+        // Record deletion snapshot to history
+        pushToHistory(paths);
+      }
+      isDraggingDelete.current = false;
+      hasDeletedInCurrentDrag.current = false;
+      return;
+    }
 
     if (currentPoints.length > 0) {
       const stroke = getStroke(currentPoints, options);
       const pathData = getSvgPathFromStroke(stroke);
-      // Store both pathData and rawPoints so we can check hitboxes during drag-delete
-      setPaths((prev) => [
-        ...prev,
+      const newPaths = [
+        ...paths,
         { pathData, color: strokeColor, rawPoints: currentPoints },
-      ]); 
-      setCurrentPoints([]); 
-      setRedoPaths([]); 
+      ];
+
+      pushToHistory(newPaths);
+      setCurrentPoints([]);
     }
   }
 
   const handleUndo = () => {
-    if (paths.length > 0) {
-      const lastPath = paths[paths.length - 1];
-      setRedoPaths((prev) => [...prev, lastPath]); 
-      setPaths((prev) => prev.slice(0, -1)); 
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      setPaths(history[prevIndex]);
     }
   };
 
   const handleRedo = () => {
-    if (redoPaths.length > 0) {
-      const lastRedoPath = redoPaths[redoPaths.length - 1];
-      setPaths((prev) => [...prev, lastRedoPath]); 
-      setRedoPaths((prev) => prev.slice(0, -1)); 
+    if (historyIndex < history.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      setPaths(history[nextIndex]);
     }
   };
 
   const handleColorChange = (color) => {
-    setIsDeleting(false); 
+    setIsDeleting(false);
     if (isErasing) {
       setIsErasing(false);
       setStrokeSize(8);
     }
-    setStrokeColor(color); 
+    setStrokeColor(color);
   };
 
   const handleEraser = (color) => {
@@ -167,9 +196,13 @@ function App() {
 
   const handleKeyDown = (e) => {
     if (e.ctrlKey || e.metaKey) {
-      switch (e.key) {
+      switch (e.key.toLowerCase()) {
         case "z":
-          handleUndo();
+          if (e.shiftKey) {
+            handleRedo();
+          } else {
+            handleUndo();
+          }
           break;
         case "y":
           handleRedo();
@@ -185,7 +218,7 @@ function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [paths, redoPaths]); 
+  }, [historyIndex, history]);
 
   return (
     <div className="wrapper" tabIndex={0}>
@@ -203,10 +236,10 @@ function App() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
-          style={{ 
-            touchAction: "none", 
+          style={{
+            touchAction: "none",
             background: "#101214",
-            cursor: isDeleting ? "crosshair" : "default"
+            cursor: isDeleting ? "crosshair" : "default",
           }}
         >
           {paths.map((pathItem, index) => (
@@ -237,6 +270,7 @@ function App() {
             startIcon={<UndoOutlined />}
             variant="contained"
             onClick={handleUndo}
+            disabled={historyIndex <= 0}
             style={{ margin: "10px" }}
           >
             Undo
@@ -245,6 +279,7 @@ function App() {
             startIcon={<RedoOutlined />}
             variant="contained"
             onClick={handleRedo}
+            disabled={historyIndex >= history.length - 1}
             style={{ margin: "10px" }}
           >
             Redo
