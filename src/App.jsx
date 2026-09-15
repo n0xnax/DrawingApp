@@ -10,6 +10,7 @@ import {
   DownloadOutlined,
   Layers,
   CleaningServices,
+  DragIndicator,
 } from "@mui/icons-material";
 
 const average = (a, b) => (a + b) / 2;
@@ -69,11 +70,18 @@ function App() {
   const [bgColor, setBgColor] = useState("#101214");
   const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 });
 
+  // Toolbar position and drag tracking
+  const [toolbarPos, setToolbarPos] = useState({
+    x: window.innerWidth / 2,
+    y: window.innerHeight - 50,
+  });
+  const isDraggingToolbar = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+
   const isDraggingDelete = useRef(false);
   const hasDeletedInCurrentDrag = useRef(false);
   const svgRef = useRef();
 
-  // Primary contrast color toggles between white on dark bg and dark on light bg
   const contrastColor = bgColor === "#101214" ? "white" : "#101214";
 
   const options = {
@@ -168,6 +176,39 @@ function App() {
       setCurrentPoints([]);
     }
   }
+
+  // Toolbar drag handlers
+  const handleToolbarDragStart = (e) => {
+    e.stopPropagation();
+    isDraggingToolbar.current = true;
+    dragOffset.current = {
+      x: e.clientX - toolbarPos.x,
+      y: e.clientY - toolbarPos.y,
+    };
+  };
+
+  const handleToolbarDragMove = (e) => {
+    if (!isDraggingToolbar.current) return;
+    setToolbarPos({
+      x: e.clientX - dragOffset.current.x,
+      y: e.clientY - dragOffset.current.y,
+    });
+  };
+
+  const handleToolbarDragEnd = () => {
+    isDraggingToolbar.current = false;
+  };
+
+  useEffect(() => {
+    const onMove = (e) => handleToolbarDragMove(e);
+    const onUp = () => handleToolbarDragEnd();
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [toolbarPos]);
 
   const handleUndo = () => {
     if (historyIndex > 0) {
@@ -353,65 +394,105 @@ function App() {
         />
       </svg>
 
-      {/* Single-row horizontally centered toolbar */}
+      {/* Movable, Compact Floating Control Toolbar */}
       <Card
         className="settings"
         variant="outlined"
         sx={{
           backgroundColor: "#12171c",
           position: "absolute",
-          bottom: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          padding: "8px 16px",
+          left: `${toolbarPos.x}px`,
+          top: `${toolbarPos.y}px`,
+          transform: "translate(-50%, -50%)",
+          padding: "4px 8px",
           display: "flex",
           flexDirection: "row",
           alignItems: "center",
-          gap: "16px",
+          gap: "8px",
           width: "max-content",
+          borderRadius: "8px",
           zIndex: 10,
+          boxShadow: "0px 4px 12px rgba(0,0,0,0.4)",
         }}
       >
+        {/* Drag Handle */}
+        <div
+          onPointerDown={handleToolbarDragStart}
+          style={{
+            cursor: "grab",
+            display: "flex",
+            alignItems: "center",
+            color: "#666",
+            paddingRight: "2px",
+          }}
+        >
+          <DragIndicator fontSize="small" />
+        </div>
+
         <div
           className="undoredo"
           style={{ display: "flex", alignItems: "center" }}
         >
           <Button
-            startIcon={<UndoOutlined />}
+            startIcon={<UndoOutlined fontSize="small" />}
             variant="contained"
+            size="small"
             onClick={handleUndo}
             disabled={historyIndex <= 0}
-            style={{ margin: "0 2px" }}
+            style={{
+              margin: "0 2px",
+              padding: "2px 8px",
+              fontSize: "11px",
+              minWidth: "auto",
+            }}
           >
             Undo
           </Button>
           <Button
-            startIcon={<RedoOutlined />}
+            startIcon={<RedoOutlined fontSize="small" />}
             variant="contained"
+            size="small"
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
-            style={{ margin: "0 2px" }}
+            style={{
+              margin: "0 2px",
+              padding: "2px 8px",
+              fontSize: "11px",
+              minWidth: "auto",
+            }}
           >
             Redo
           </Button>
           <Tooltip title="Clear Canvas">
             <Button
-              startIcon={<CleaningServices />}
+              startIcon={<CleaningServices fontSize="small" />}
               variant="outlined"
+              size="small"
               color="error"
               onClick={handleClearCanvas}
-              style={{ margin: "0 2px" }}
+              style={{
+                margin: "0 2px",
+                padding: "2px 6px",
+                fontSize: "11px",
+                minWidth: "auto",
+              }}
             >
               Clear
             </Button>
           </Tooltip>
           <Tooltip title="Export Drawing as PNG">
             <Button
-              startIcon={<DownloadOutlined />}
+              startIcon={<DownloadOutlined fontSize="small" />}
               variant="outlined"
+              size="small"
               color="success"
               onClick={handleExportPNG}
-              style={{ margin: "0 2px" }}
+              style={{
+                margin: "0 2px",
+                padding: "2px 6px",
+                fontSize: "11px",
+                minWidth: "auto",
+              }}
             >
               Export
             </Button>
@@ -436,11 +517,14 @@ function App() {
           ].map((color) => (
             <IconButton
               key={color}
+              size="small"
               onClick={() => handleColorChange(color)}
               className="color-button"
               style={{
                 backgroundColor: color,
                 margin: "0 2px",
+                width: "22px",
+                height: "22px",
                 border:
                   strokeColor === color && !isErasing && !isDeleting
                     ? "2px solid #00e5ff"
@@ -451,56 +535,66 @@ function App() {
 
           <Tooltip title="Background Eraser">
             <IconButton
+              size="small"
               onClick={handleEraser}
               className="color-button eraser"
               style={{
                 backgroundColor: isErasing ? "#00e5ff" : "grey",
                 margin: "0 2px",
+                width: "24px",
+                height: "24px",
               }}
             >
-              <EditOff style={{ color: "white" }} />
+              <EditOff style={{ color: "white", fontSize: "14px" }} />
             </IconButton>
           </Tooltip>
 
           <Tooltip title="Line Deletion Mode">
             <IconButton
+              size="small"
               onClick={toggleDeleteMode}
               className="color-button delete"
               style={{
                 backgroundColor: isDeleting ? "#e53935" : "grey",
                 margin: "0 2px",
+                width: "24px",
+                height: "24px",
               }}
             >
-              <Delete style={{ color: "white" }} />
+              <Delete style={{ color: "white", fontSize: "14px" }} />
             </IconButton>
           </Tooltip>
 
           <div
             style={{
-              marginLeft: "6px",
+              marginLeft: "4px",
               borderLeft: "1px solid #444",
-              paddingLeft: "6px",
+              paddingLeft: "4px",
               display: "flex",
             }}
           >
             <Tooltip title="Dark Canvas">
               <IconButton
+                size="small"
                 onClick={() => handleBgChange("#101214")}
                 style={{
                   color: bgColor === "#101214" ? "#00e5ff" : "#fff",
+                  padding: "2px",
                 }}
               >
-                <Layers />
+                <Layers style={{ fontSize: "16px" }} />
               </IconButton>
             </Tooltip>
             <Tooltip title="Light Canvas">
               <IconButton
+                size="small"
                 onClick={() => handleBgChange("#f5f5f5")}
                 style={{
                   color: bgColor === "#f5f5f5" ? "#00e5ff" : "#aaa",
+                  padding: "2px",
                 }}
               >
-                <Layers />
+                <Layers style={{ fontSize: "16px" }} />
               </IconButton>
             </Tooltip>
           </div>
@@ -516,29 +610,16 @@ function App() {
 }
 
 const StrokeSizeSlider = ({ strokeSize, setStrokeSize }) => {
-  const marks = [
-    { value: 2 },
-    { value: 4 },
-    { value: 6 },
-    { value: 8 },
-    { value: 10 },
-    { value: 12 },
-    { value: 14 },
-    { value: 16 },
-    { value: 18 },
-    { value: 20 },
-  ];
-
   return (
     <div
       style={{
-        width: "140px",
+        width: "90px",
         display: "flex",
         alignItems: "center",
-        gap: "8px",
+        gap: "6px",
       }}
     >
-      <div style={{ fontFamily: "roboto", color: "white", fontSize: "12px" }}>
+      <div style={{ fontFamily: "roboto", color: "white", fontSize: "11px" }}>
         Size
       </div>
       <Slider
@@ -547,10 +628,10 @@ const StrokeSizeSlider = ({ strokeSize, setStrokeSize }) => {
         value={strokeSize}
         onChange={(e, newValue) => setStrokeSize(newValue)}
         step={2}
-        marks={marks}
         min={2}
         max={20}
         valueLabelDisplay="auto"
+        sx={{ padding: "8px 0" }}
       />
     </div>
   );
